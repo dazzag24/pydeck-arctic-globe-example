@@ -1,0 +1,5 @@
+.venv/
+__pycache__/
+*.pyc
+arctic_arc_layer.html
+arctic_globe_view.html
