@@ -7,6 +7,8 @@ on:
 
 permissions:
   contents: read
+  pages: write
+  id-token: write
 
 jobs:
   build:
@@ -30,9 +32,32 @@ jobs:
       - name: Generate HTML
         run: uv run main.py
 
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
       - name: Upload visualization
         uses: actions/upload-artifact@v4
         with:
           name: arctic-globe-view
           path: arctic_globe_view.html
           if-no-files-found: error
+
+      - name: Prepare GitHub Pages site
+        run: mkdir -p site && cp arctic_globe_view.html site/index.html
+
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

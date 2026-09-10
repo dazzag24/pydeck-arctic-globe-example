@@ -15,3 +15,5 @@ This creates `arctic_globe_view.html`. It uses pydeck's experimental `_GlobeView
 ## GitHub Actions
 
 Every push to `main` builds the HTML with `uv` and uploads it as the `arctic-globe-view` artifact. Open the repository's **Actions** tab, select a successful **Build visualization** run, and download the artifact from the **Artifacts** section.
+
+The same workflow publishes the visualization to [GitHub Pages](https://dazzag24.github.io/pydeck-arctic-globe-example/). The Pages site is deployed from `site/index.html` after each successful build.
