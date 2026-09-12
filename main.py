@@ -7,58 +7,60 @@ import pydeck as pdk
 
 
 OUTPUT_PATH = Path(__file__).with_name("arctic_globe_view.html")
+DATA_PATH = Path(__file__).with_name("data") / "20261109_Data.csv"
 COUNTRIES_URL = "https://d2ad6b4ur7yvpq.cloudfront.net/naturalearth-3.3.0/ne_50m_admin_0_scale_rank.geojson"
 
 
-HUBS = [
-    {"name": "Longyearbyen", "country": "Norway", "longitude": 15.6469, "latitude": 78.2232},
-    {"name": "Reykjavik", "country": "Iceland", "longitude": -21.9426, "latitude": 64.1466},
-    {"name": "Nuuk", "country": "Greenland", "longitude": -51.7216, "latitude": 64.1835},
-    {"name": "Tromso", "country": "Norway", "longitude": 18.9553, "latitude": 69.6492},
-    {"name": "Murmansk", "country": "Russia", "longitude": 33.0749, "latitude": 68.9707},
-    {"name": "Kiruna", "country": "Sweden", "longitude": 20.2253, "latitude": 67.8558},
-    {"name": "Fairbanks", "country": "United States", "longitude": -147.7164, "latitude": 64.8378},
-    {"name": "Utqiagvik", "country": "United States", "longitude": -156.7887, "latitude": 71.2906},
-    {"name": "Inuvik", "country": "Canada", "longitude": -133.7218, "latitude": 68.3607},
-    {"name": "Cambridge Bay", "country": "Canada", "longitude": -105.0597, "latitude": 69.1169},
-    {"name": "Svalbard", "country": "Norway", "longitude": 16.0, "latitude": 80.0},
-    {"name": "Tiksi", "country": "Russia", "longitude": 128.8694, "latitude": 71.6366},
+REQUIRED_COLUMNS = [
+    "prev_lat",
+    "prev_long",
+    "dest_lat",
+    "dest_long",
+    "frame1_pct",
+    "Journey",
 ]
 
 
-ROUTES = [
-    ("Reykjavik", "Nuuk", "North Atlantic observations"),
-    ("Reykjavik", "Longyearbyen", "Polar climate monitoring"),
-    ("Tromso", "Longyearbyen", "Research vessel support"),
-    ("Tromso", "Kiruna", "Aurora and atmosphere studies"),
-    ("Murmansk", "Longyearbyen", "Arctic logistics"),
-    ("Murmansk", "Tiksi", "Northern Sea Route logistics"),
-    ("Fairbanks", "Utqiagvik", "Alaska field research"),
-    ("Fairbanks", "Inuvik", "Permafrost observations"),
-    ("Utqiagvik", "Cambridge Bay", "Sea ice observations"),
-    ("Inuvik", "Cambridge Bay", "Northwest Passage monitoring"),
-    ("Longyearbyen", "Svalbard", "High Arctic observatory access"),
-    ("Svalbard", "Tiksi", "Pan-Arctic data exchange"),
-]
+def frame1_color(value: float | None) -> list[int]:
+    if value is None or pd.isna(value):
+        return [145, 145, 145]
+
+    fraction = max(0.0, min(float(value), 100.0)) / 100.0
+    low = (44, 123, 182)
+    high = (215, 48, 39)
+    return [round(start + fraction * (end - start)) for start, end in zip(low, high)]
 
 
 def build_route_data() -> tuple[pd.DataFrame, pd.DataFrame]:
-    hubs = pd.DataFrame(HUBS)
-    coordinates = hubs.set_index("name")
-    routes = pd.DataFrame(
-        [
-            {
-                "source_name": source,
-                "target_name": target,
-                "route": route,
-                "source_longitude": coordinates.loc[source, "longitude"],
-                "source_latitude": coordinates.loc[source, "latitude"],
-                "target_longitude": coordinates.loc[target, "longitude"],
-                "target_latitude": coordinates.loc[target, "latitude"],
-            }
-            for source, target, route in ROUTES
-        ]
+    data = pd.read_csv(DATA_PATH)
+    missing_columns = set(REQUIRED_COLUMNS) - set(data.columns)
+    if missing_columns:
+        raise ValueError(f"Missing required CSV columns: {sorted(missing_columns)}")
+
+    numeric_columns = ["prev_lat", "prev_long", "dest_lat", "dest_long", "frame1_pct"]
+    for column in numeric_columns:
+        data[column] = pd.to_numeric(data[column], errors="coerce")
+
+    route_columns = ["prev_lat", "prev_long", "dest_lat", "dest_long"]
+    routes = data.dropna(subset=route_columns).copy()
+    routes["Journey"] = routes["Journey"].fillna("Journey unavailable")
+    routes["route_color"] = routes["frame1_pct"].apply(frame1_color)
+    routes = routes.rename(
+        columns={
+            "prev_long": "source_longitude",
+            "prev_lat": "source_latitude",
+            "dest_long": "target_longitude",
+            "dest_lat": "target_latitude",
+        }
     )
+
+    source_hubs = routes[["source_latitude", "source_longitude"]].rename(
+        columns={"source_latitude": "latitude", "source_longitude": "longitude"}
+    )
+    target_hubs = routes[["target_latitude", "target_longitude"]].rename(
+        columns={"target_latitude": "latitude", "target_longitude": "longitude"}
+    )
+    hubs = pd.concat([source_hubs, target_hubs], ignore_index=True).drop_duplicates()
     return hubs, routes
 
 
@@ -70,8 +72,8 @@ def build_deck() -> pdk.Deck:
         data=routes,
         get_source_position="[source_longitude, source_latitude]",
         get_target_position="[target_longitude, target_latitude]",
-        get_source_color=[71, 191, 190],
-        get_target_color=[244, 126, 88],
+        get_source_color="route_color",
+        get_target_color="route_color",
         get_width=2.5,
         great_circle=True,
         auto_highlight=True,
@@ -108,7 +110,7 @@ def build_deck() -> pdk.Deck:
         map_provider=None,
         parameters={"cull": True},
         tooltip={
-            "html": "<b>{source_name} to {target_name}</b><br/>{route}",
+            "html": "<b>{Journey}</b>",
             "style": {"backgroundColor": "#102a30", "color": "#f6eed0"},
         },
         description="Arctic research and logistics connections",
