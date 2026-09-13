@@ -49,7 +49,13 @@ def load_country_data() -> dict:
 
     for feature in country_data["features"]:
         properties = feature.setdefault("properties", {})
-        name = properties.get("ADMIN") or properties.get("NAME") or properties.get("name") or "unknown"
+        name = (
+            properties.get("ADMIN")
+            or properties.get("NAME")
+            or properties.get("name")
+            or properties.get("sr_subunit")
+            or "unknown"
+        )
         color_index = sum(ord(character) for character in name) % len(COUNTRY_PALETTE)
         properties["fill_color"] = COUNTRY_PALETTE[color_index]
     return country_data
