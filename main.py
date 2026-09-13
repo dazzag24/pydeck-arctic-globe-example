@@ -124,7 +124,7 @@ def build_deck() -> pdk.Deck:
         data=countries,
         stroked=False,
         filled=True,
-        get_fill_color="properties.fill_color",
+        get_fill_color="[properties.fill_color[0], properties.fill_color[1], properties.fill_color[2]]",
     )
 
     view_state = pdk.ViewState(latitude=73, longitude=0, zoom=1.8)
