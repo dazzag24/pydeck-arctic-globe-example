@@ -1,6 +1,8 @@
 """Create an interactive Arc Layer map of Arctic research connections."""
 
+import json
 from pathlib import Path
+from urllib.request import urlopen
 
 import pandas as pd
 import pydeck as pdk
@@ -9,15 +11,16 @@ import pydeck as pdk
 OUTPUT_PATH = Path(__file__).with_name("arctic_globe_view.html")
 DATA_PATH = Path(__file__).with_name("data") / "20261109_Data.csv"
 COUNTRIES_URL = "https://d2ad6b4ur7yvpq.cloudfront.net/naturalearth-3.3.0/ne_50m_admin_0_scale_rank.geojson"
-COUNTRY_COLOR_ACCESSOR = """properties => {
-    const name = properties.ADMIN || properties.NAME || properties.name || "unknown";
-    const palette = [
-        [38, 166, 154], [67, 160, 71], [102, 153, 204], [230, 159, 0],
-        [213, 94, 0], [204, 121, 167], [117, 112, 179], [166, 216, 84],
-    ];
-    const hash = [...name].reduce((total, character) => total + character.charCodeAt(0), 0);
-    return palette[hash % palette.length];
-}"""
+COUNTRY_PALETTE = [
+    [38, 166, 154],
+    [67, 160, 71],
+    [102, 153, 204],
+    [230, 159, 0],
+    [213, 94, 0],
+    [204, 121, 167],
+    [117, 112, 179],
+    [166, 216, 84],
+]
 
 
 REQUIRED_COLUMNS = [
@@ -38,6 +41,18 @@ def frame1_color(value: float | None) -> list[int]:
     low = (44, 123, 182)
     high = (215, 48, 39)
     return [round(start + fraction * (end - start)) for start, end in zip(low, high)]
+
+
+def load_country_data() -> dict:
+    with urlopen(COUNTRIES_URL, timeout=30) as response:
+        country_data = json.load(response)
+
+    for feature in country_data["features"]:
+        properties = feature.setdefault("properties", {})
+        name = properties.get("ADMIN") or properties.get("NAME") or properties.get("name") or "unknown"
+        color_index = sum(ord(character) for character in name) % len(COUNTRY_PALETTE)
+        properties["fill_color"] = COUNTRY_PALETTE[color_index]
+    return country_data
 
 
 def build_route_data() -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -75,6 +90,7 @@ def build_route_data() -> tuple[pd.DataFrame, pd.DataFrame]:
 
 def build_deck() -> pdk.Deck:
     hubs, routes = build_route_data()
+    countries = load_country_data()
 
     arc_layer = pdk.Layer(
         "ArcLayer",
@@ -105,10 +121,10 @@ def build_deck() -> pdk.Deck:
     country_layer = pdk.Layer(
         "GeoJsonLayer",
         id="arctic-globe-base",
-        data=COUNTRIES_URL,
+        data=countries,
         stroked=False,
         filled=True,
-        get_fill_color=COUNTRY_COLOR_ACCESSOR,
+        get_fill_color="properties.fill_color",
     )
 
     view_state = pdk.ViewState(latitude=73, longitude=0, zoom=1.8)
